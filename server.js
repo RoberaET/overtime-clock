@@ -10,7 +10,12 @@ const io = socketIo(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  allowEIO3: true
 });
 
 const PORT = process.env.PORT || 3000;
@@ -249,9 +254,61 @@ app.get('/api/overtime-tracking', (req, res) => {
   });
 });
 
+// Get session status (for polling fallback)
+app.get('/api/session-status/:sessionId', (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).json({ success: false, error: 'Session not found' });
+  }
+  
+  if (session.isActive) {
+    const now = new Date();
+    const elapsedSeconds = (now - session.startTime) / 1000;
+    
+    if (session.isOpenEnded) {
+      session.currentEarnings = session.calculation.ratePerSecond * elapsedSeconds;
+      session.elapsedTime = elapsedSeconds;
+      session.remainingTime = null;
+    } else {
+      const maxSeconds = session.totalHours * 3600;
+      if (elapsedSeconds < maxSeconds) {
+        session.currentEarnings = session.calculation.ratePerSecond * elapsedSeconds;
+        session.elapsedTime = elapsedSeconds;
+        session.remainingTime = maxSeconds - elapsedSeconds;
+      } else {
+        session.isActive = false;
+        session.endTime = now;
+        session.duration = elapsedSeconds;
+        session.currentEarnings = session.calculation.totalPay;
+        session.elapsedTime = elapsedSeconds;
+        session.remainingTime = 0;
+      }
+    }
+  }
+  
+  res.json({
+    success: true,
+    session: {
+      currentEarnings: session.currentEarnings,
+      elapsedTime: session.elapsedTime,
+      remainingTime: session.remainingTime,
+      isOpenEnded: session.isOpenEnded,
+      isActive: session.isActive
+    }
+  });
+});
+
 // Socket.io for real-time updates
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
+  
+  // Send connection confirmation
+  socket.emit('connected', { 
+    message: 'Connected to server',
+    timestamp: new Date().toISOString()
+  });
   
   socket.on('join-session', (sessionId) => {
     socket.join(sessionId);
@@ -261,8 +318,16 @@ io.on('connection', (socket) => {
     }
   });
   
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+  socket.on('ping', () => {
+    socket.emit('pong', { timestamp: new Date().toISOString() });
+  });
+  
+  socket.on('disconnect', (reason) => {
+    console.log('Client disconnected:', socket.id, 'Reason:', reason);
+  });
+  
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
   });
 });
 

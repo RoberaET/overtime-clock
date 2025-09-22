@@ -36,6 +36,46 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Polling fallback for when Socket.io is not available
+let pollingInterval;
+
+function startPollingFallback() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+    
+    pollingInterval = setInterval(async () => {
+        if (!currentSession || !isCounterRunning) {
+            clearInterval(pollingInterval);
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/session-status/${currentSession}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.session) {
+                    updateCounterDisplay({
+                        currentEarnings: data.session.currentEarnings,
+                        elapsedTime: data.session.elapsedTime,
+                        remainingTime: data.session.remainingTime,
+                        isOpenEnded: data.session.isOpenEnded
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+    }, 1000); // Poll every second
+}
+
+function stopPollingFallback() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
 // Mobile optimizations
 function setupMobileOptimizations() {
     // Prevent zoom on input focus (iOS)
@@ -131,20 +171,56 @@ window.addEventListener('error', function(e) {
 // Initialize Socket.io connection
 function initializeSocket() {
     try {
-        socket = io();
+        socket = io({
+            transports: ['websocket', 'polling'],
+            timeout: 20000,
+            forceNew: true
+        });
+        
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        let reconnectInterval;
         
         socket.on('connect', () => {
             console.log('Connected to server');
+            reconnectAttempts = 0;
+            clearInterval(reconnectInterval);
+            showMessage('Connected to server', 'success');
         });
         
-        socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            showMessage('Connection lost. Please refresh the page.', 'error');
+        socket.on('connected', (data) => {
+            console.log('Server confirmed connection:', data);
+        });
+        
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected from server. Reason:', reason);
+            
+            if (reason === 'io server disconnect') {
+                // Server initiated disconnect, don't reconnect
+                showMessage('Server disconnected. Please refresh the page.', 'error');
+                return;
+            }
+            
+            // Client-side disconnect, attempt to reconnect
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                showMessage(`Connection lost. Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+                
+                reconnectInterval = setTimeout(() => {
+                    socket.connect();
+                }, 2000 * reconnectAttempts); // Exponential backoff
+            } else {
+                showMessage('Connection lost. Please refresh the page.', 'error');
+            }
         });
         
         socket.on('connect_error', (error) => {
             console.error('Socket connection error:', error);
-            showMessage('Connection error. Please refresh the page.', 'error');
+            if (reconnectAttempts < maxReconnectAttempts) {
+                showMessage('Connection error. Retrying...', 'warning');
+            } else {
+                showMessage('Connection error. Please refresh the page.', 'error');
+            }
         });
         
         socket.on('session-data', (session) => {
@@ -158,6 +234,14 @@ function initializeSocket() {
         socket.on('session-complete', (data) => {
             handleSessionComplete(data);
         });
+        
+        // Ping-pong for connection health
+        setInterval(() => {
+            if (socket && socket.connected) {
+                socket.emit('ping');
+            }
+        }, 30000); // Ping every 30 seconds
+        
     } catch (error) {
         console.error('Socket initialization error:', error);
         showMessage('Failed to connect to server. Please refresh the page.', 'error');
@@ -253,7 +337,13 @@ async function startOvertimeSession() {
             isCounterRunning = true;
             
             // Join the session room
-            socket.emit('join-session', currentSession);
+            if (socket && socket.connected) {
+                socket.emit('join-session', currentSession);
+            } else {
+                // Fallback: Use polling if Socket.io is not available
+                console.log('Socket.io not available, using polling fallback');
+                startPollingFallback();
+            }
             
             // Update UI
             displayCalculationResults(result.calculation, result.warnings);
@@ -289,6 +379,9 @@ async function handleStop() {
         if (result.success) {
             isCounterRunning = false;
             currentSession = null;
+            
+            // Stop polling fallback
+            stopPollingFallback();
             
             // Update UI
             showFormSection();
