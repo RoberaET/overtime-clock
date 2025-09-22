@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethiopian Overtime Clock</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-clock"></i> Ethiopian Overtime Clock</h1>
+            <p>Real-time overtime money counter based on Labor Proclamation No. 1156/2019</p>
+        </header>
+
+        <main>
+            <!-- Input Form -->
+            <div class="form-section" id="formSection">
+                <div class="form-container">
+                    <h2>Overtime Calculator</h2>
+                    <form id="overtimeForm">
+                        <div class="form-group">
+                            <label for="salary">
+                                <i class="fas fa-money-bill-wave"></i>
+                                Monthly Salary (ETB)
+                            </label>
+                            <input type="number" id="salary" name="salary" min="1" required 
+                                   placeholder="Enter your monthly salary">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dailyHours">
+                                <i class="fas fa-clock"></i>
+                                Daily Working Hours
+                            </label>
+                            <input type="number" id="dailyHours" name="dailyHours" min="1" max="24" step="0.5" required 
+                                   placeholder="Hours worked per day" value="8">
+                            <small class="form-help">Standard is 8 hours per day</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-money-bill-wave"></i>
+                                Your Hourly Rate
+                            </label>
+                            <div class="hourly-rate-display" id="hourlyRateDisplay">
+                                <span class="rate-amount">ETB 0.00</span>
+                                <span class="rate-label">per hour</span>
+                            </div>
+                            <small class="form-help">Calculated from your salary and daily hours</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="overtimeType">
+                                <i class="fas fa-moon"></i>
+                                Overtime Type
+                            </label>
+                            <select id="overtimeType" name="overtimeType" required>
+                                <option value="">Select overtime type</option>
+                                <option value="normal">Normal Day (1.5x)</option>
+                                <option value="night">Night Shift (1.75x)</option>
+                                <option value="sunday">Sunday (2.0x)</option>
+                                <option value="holiday">Public Holiday (2.5x)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="hours">
+                                <i class="fas fa-hourglass-half"></i>
+                                Overtime Hours (Optional)
+                            </label>
+                            <input type="number" id="hours" name="hours" min="0.1" step="0.1" 
+                                   placeholder="Expected hours (leave empty for open-ended)">
+                            <small class="form-help">Leave empty to start open-ended tracking, or enter expected hours</small>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" id="calculateBtn" class="btn btn-secondary">
+                                <i class="fas fa-calculator"></i>
+                                Calculate
+                            </button>
+                            <button type="submit" id="startBtn" class="btn btn-primary">
+                                <i class="fas fa-play"></i>
+                                Start Counter
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <div class="calculation-summary">
+                    <h3>Calculation Summary</h3>
+                    <div id="warningsContainer"></div>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <span class="label">Hourly Rate:</span>
+                            <span class="value" id="hourlyRate">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Overtime Multiplier:</span>
+                            <span class="value" id="multiplier">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Total Overtime Pay:</span>
+                            <span class="value" id="totalPay">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Rate per Second:</span>
+                            <span class="value" id="ratePerSecond">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Counter -->
+            <div class="counter-section" id="counterSection" style="display: none;">
+                <div class="counter-container">
+                    <h3>Real-time Earnings</h3>
+                    <div class="counter-display">
+                        <div class="earnings-amount" id="currentEarnings">ETB 0.00</div>
+                        <div class="time-info">
+                            <div class="time-item">
+                                <span class="time-label">Elapsed:</span>
+                                <span class="time-value" id="elapsedTime">00:00:00</span>
+                            </div>
+                            <div class="time-item">
+                                <span class="time-label">Remaining:</span>
+                                <span class="time-value" id="remainingTime">00:00:00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="counter-actions">
+                        <button id="stopBtn" class="btn btn-danger">
+                            <i class="fas fa-stop"></i>
+                            Stop Counter
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overtime Tracking -->
+            <div class="tracking-section" id="trackingSection">
+                <h3>Overtime Tracking</h3>
+                <div class="tracking-grid">
+                    <div class="tracking-item">
+                        <span class="tracking-label">This Week:</span>
+                        <span class="tracking-value" id="weeklyHours">0 hours</span>
+                        <span class="tracking-limit">/ 12 hours limit</span>
+                    </div>
+                    <div class="tracking-item">
+                        <span class="tracking-label">This Year:</span>
+                        <span class="tracking-value" id="yearlyHours">0 hours</span>
+                        <span class="tracking-limit">/ 100 hours limit</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session History -->
+            <div class="history-section" id="historySection" style="display: none;">
+                <h3>Session History</h3>
+                <div class="history-list" id="historyList">
+                    <!-- Sessions will be populated here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Error/Success Messages -->
+        <div class="message" id="message"></div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+        <button onclick="showLoading(false)" style="margin-top: 20px; padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
