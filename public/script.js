@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ensure loading overlay is hidden on page load
         showLoading(false);
         
+        // Mobile optimizations
+        setupMobileOptimizations();
+        
         initializeSocket();
         setupEventListeners();
         loadSessionHistory();
@@ -32,6 +35,91 @@ document.addEventListener('DOMContentLoaded', function() {
         showMessage('Error initializing application. Please refresh the page.', 'error');
     }
 });
+
+// Mobile optimizations
+function setupMobileOptimizations() {
+    // Prevent zoom on input focus (iOS)
+    const inputs = document.querySelectorAll('input[type="number"], input[type="text"], select');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            // Ensure font size is at least 16px to prevent zoom
+            if (parseInt(window.getComputedStyle(this).fontSize) < 16) {
+                this.style.fontSize = '16px';
+            }
+        });
+    });
+    
+    // Add touch feedback for buttons
+    const buttons = document.querySelectorAll('.btn');
+    buttons.forEach(button => {
+        button.addEventListener('touchstart', function() {
+            this.classList.add('btn-touch');
+        });
+        
+        button.addEventListener('touchend', function() {
+            setTimeout(() => {
+                this.classList.remove('btn-touch');
+            }, 150);
+        });
+    });
+    
+    // Improve form validation for mobile
+    const form = document.getElementById('overtimeForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Scroll to first error if validation fails
+            const firstError = form.querySelector('.error, [aria-invalid="true"]');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstError.focus();
+            }
+        });
+    }
+    
+    // Add haptic feedback if available
+    if ('vibrate' in navigator) {
+        const actionButtons = document.querySelectorAll('#calculateBtn, #startBtn, #stopBtn');
+        actionButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                navigator.vibrate(50); // Short vibration
+            });
+        });
+    }
+    
+    // Improve mobile keyboard handling
+    const numberInputs = document.querySelectorAll('input[type="number"]');
+    numberInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            // Ensure proper number formatting
+            if (this.value && !isNaN(this.value)) {
+                this.value = parseFloat(this.value);
+            }
+        });
+        
+        // Add input mode for better mobile keyboards
+        if (input.id === 'salary') {
+            input.setAttribute('inputmode', 'numeric');
+        } else if (input.id === 'dailyHours' || input.id === 'hours') {
+            input.setAttribute('inputmode', 'decimal');
+        }
+    });
+    
+    // Prevent form submission on Enter key in number inputs (mobile keyboards)
+    numberInputs.forEach(input => {
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // Focus next input or trigger calculate
+                const nextInput = this.parentElement.nextElementSibling?.querySelector('input, select');
+                if (nextInput) {
+                    nextInput.focus();
+                } else {
+                    document.getElementById('calculateBtn').click();
+                }
+            }
+        });
+    });
+}
 
 // Global error handler
 window.addEventListener('error', function(e) {
@@ -126,6 +214,7 @@ async function handleCalculate() {
         });
         
         const result = await response.json();
+        console.log('API Response:', result);
         
         if (result.success) {
             displayCalculationResults(result.calculation, result.warnings);
@@ -289,10 +378,24 @@ function validateForm() {
 
 // Display calculation results
 function displayCalculationResults(calculation, warnings = []) {
-    document.getElementById('hourlyRate').textContent = `ETB ${calculation.hourlyRate.toFixed(2)}`;
-    document.getElementById('multiplier').textContent = `${calculation.multiplier}x`;
-    document.getElementById('totalPay').textContent = `ETB ${calculation.totalPay.toFixed(2)}`;
-    document.getElementById('ratePerSecond').textContent = `ETB ${calculation.ratePerSecond.toFixed(4)}`;
+    console.log('Displaying calculation results:', calculation);
+    
+    const hourlyRateEl = document.getElementById('hourlyRate');
+    const multiplierEl = document.getElementById('multiplier');
+    const totalPayEl = document.getElementById('totalPay');
+    const ratePerSecondEl = document.getElementById('ratePerSecond');
+    
+    console.log('Elements found:', {
+        hourlyRate: hourlyRateEl,
+        multiplier: multiplierEl,
+        totalPay: totalPayEl,
+        ratePerSecond: ratePerSecondEl
+    });
+    
+    if (hourlyRateEl) hourlyRateEl.textContent = `ETB ${calculation.hourlyRate.toFixed(2)}`;
+    if (multiplierEl) multiplierEl.textContent = `${calculation.multiplier}x`;
+    if (totalPayEl) totalPayEl.textContent = `ETB ${calculation.totalPay.toFixed(2)}`;
+    if (ratePerSecondEl) ratePerSecondEl.textContent = `ETB ${calculation.ratePerSecond.toFixed(4)}`;
     
     // Display warnings if any
     displayWarnings(warnings);
